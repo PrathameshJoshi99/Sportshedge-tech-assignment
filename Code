@@ -1,0 +1,136 @@
+#include <iostream>
+#include <vector>
+
+
+struct Order {
+    int order_id;
+    std::string stock_symbol;
+    std::string buy_sell;
+    double price;
+    int quantity;
+    int timestamp;
+};
+
+// Define a Trade structure
+struct Trade {
+    int buy_order_id;
+    int sell_order_id;
+    double price;
+    int quantity;
+};
+
+
+class MatchingEngine {
+public:
+    MatchingEngine() {
+        // Initialize order books for TATA and RELIANCE
+        order_books["TATA"] = {std::vector<Order>(), std::vector<Order>()};
+        order_books["RELIANCE"] = {std::vector<Order>(), std::vector<Order>()};
+    }
+
+    void place_order(const Order& order) {
+        const std::string& stock_symbol = order.stock_symbol;
+        auto& opposite_orders = order.buy_sell == "buy" ? order_books[stock_symbol].sell : order_books[stock_symbol].buy;
+        
+        std::vector<Order> matched_orders;
+        for (Order& opposite_order : opposite_orders) {
+            if ((order.buy_sell == "buy" && order.price >= opposite_order.price) ||
+                (order.buy_sell == "sell" && order.price <= opposite_order.price)) {
+                int matched_quantity = std::min(order.quantity, opposite_order.quantity);
+                Trade trade = {order.order_id, opposite_order.order_id, opposite_order.price, matched_quantity};
+                trades.push_back(trade);
+
+                opposite_order.quantity -= matched_quantity;
+                if (opposite_order.quantity == 0) {
+                    opposite_orders.erase(opposite_orders.begin());
+                }
+
+                order.quantity -= matched_quantity;
+            }
+            if ((order.buy_sell == "buy" && opposite_order.price > order.price) ||
+                (order.buy_sell == "sell" && opposite_order.price < order.price)) {
+                break;
+            }
+        }
+
+        if (order.quantity > 0) {
+            order_books[stock_symbol][order.buy_sell].push_back(order);
+        }
+    }
+
+    void cancel_order(int order_id) {
+        for (auto& stock_orders : order_books) {
+            for (auto& orders : stock_orders.second) {
+                for (auto it = orders.begin(); it != orders.end(); ++it) {
+                    if (it->order_id == order_id) {
+                        orders.erase(it);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    std::string get_order_status(int order_id) {
+        for (const Trade& trade : trades) {
+            if (trade.buy_order_id == order_id || trade.sell_order_id == order_id) {
+                return "Filled";
+            }
+        }
+        for (const auto& stock_orders : order_books) {
+            for (const auto& orders : stock_orders.second) {
+                for (const Order& order : orders) {
+                    if (order.order_id == order_id) {
+                        return "Open";
+                    }
+                }
+            }
+        }
+        return "Not Found";
+    }
+
+    void print_order_books() {
+        for (const auto& stock_orders : order_books) {
+            std::cout << stock_orders.first << " Order Book:" << std::endl;
+            for (const auto& buy_sell_orders : stock_orders.second) {
+                std::cout << buy_sell_orders.first << " Orders:" << std::endl;
+                for (const Order& order : buy_sell_orders.second) {
+                    std::cout << "Order ID: " << order.order_id << ", Price: " << order.price
+                              << ", Quantity: " << order.quantity << std::endl;
+                }
+            }
+        }
+    }
+
+private:
+    std::map<std::string, std::pair<std::vector<Order>, std::vector<Order>>> order_books;
+    std::vector<Trade> trades;
+};
+
+int main() {
+    MatchingEngine matching_engine;
+
+    // Example orders
+    Order order1 = {1, "TATA", "buy", 100.0, 10, 1};
+    Order order2 = {2, "TATA", "sell", 99.0, 5, 2};
+    Order order3 = {3, "TATA", "sell", 101.0, 7, 3};
+
+    matching_engine.place_order(order1);
+    matching_engine.place_order(order2);
+    matching_engine.place_order(order3);
+
+    matching_engine.print_order_books();
+    std::cout << "Order 2 Status: " << matching_engine.get_order_status(2) << std::endl;
+
+    std::cout << "Trades:" << std::endl;
+    for (const Trade& trade : matching_engine.trades) {
+        std::cout << "Buy Order ID: " << trade.buy_order_id << ", Sell Order ID: " << trade.sell_order_id
+                  << ", Price: " << trade.price << ", Quantity: " << trade.quantity << std::endl;
+    }
+
+    matching_engine.cancel_order(1);
+    matching_engine.print_order_books();
+
+    return 0;
+}
+
